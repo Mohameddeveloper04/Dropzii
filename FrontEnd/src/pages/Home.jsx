@@ -212,10 +212,10 @@ export default function Home() {
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8"
           >
             {[
-              { type: "Sedan", seats: "4+1", price: "₹14/km", img: "/assets/Cars/sedan.jpeg" },
-              { type: "Etios", seats: "4+1", price: "₹14/km", img: "/assets/Cars/Etios.jpeg" },
-              { type: "SUV", seats: "7+1", price: "₹19/km", img: "/assets/Cars/Suv.jpeg" },
-              { type: "MUV (Innova)", seats: "7+1", price: "₹20/km", img: "/assets/Cars/Innova.jpeg" },
+              { type: "Sedan", seats: "4+1", price: "₹15/km", img: "/assets/Cars/sedan.jpeg" },
+              { type: "Etios", seats: "4+1", price: "₹15/km", img: "/assets/Cars/Etios.jpeg" },
+              { type: "SUV", seats: "7+1", price: "₹20/km", img: "/assets/Cars/Suv.jpeg" },
+              { type: "MUV (Innova)", seats: "7+1", price: "₹21/km", img: "/assets/Cars/Innova.jpeg" },
             ].map((v, i) => (
               <motion.div
                 key={i}
