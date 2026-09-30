@@ -14,7 +14,7 @@
   --shadow-premium: 0 20px 50px -12px rgba(0, 0, 0, 0.8);
   --shadow-accent-glow: 0 0 40px rgba(234, 179, 8, 0.25);
   --shadow-luxury: 0 30px 60px -15px rgba(0, 0, 0, 0.9);
-  
+
   /* Standardized glass variables */
   --color-glass: rgba(255, 255, 255, 0.02);
   --color-glass-hover: rgba(255, 255, 255, 0.04);
@@ -31,9 +31,9 @@
 body {
   margin: 0;
   background-color: #020617;
-  background-image: 
-  radial-gradient(circle at 0% 0%, rgba(30, 41, 59, 0.4) 0%, transparent 40%),
-  radial-gradient(circle at 100% 100%, rgba(15, 23, 42, 0.4) 0%, transparent 40%);
+  background-image:
+    radial-gradient(circle at 0% 0%, rgba(30, 41, 59, 0.4) 0%, transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(15, 23, 42, 0.4) 0%, transparent 40%);
   color: white;
   font-family: 'Outfit', sans-serif;
   overflow-x: hidden;
@@ -46,23 +46,34 @@ body {
 ::-webkit-scrollbar {
   width: 10px;
 }
+
 ::-webkit-scrollbar-track {
   background: #020617;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #1E293B;
   border-radius: 10px;
   border: 2px solid #020617;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #EAB308;
 }
 
 /* Animations */
 @keyframes float {
-  0% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
-  100% { transform: translateY(0px); }
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
 }
 
 .animate-float {
@@ -70,19 +81,93 @@ body {
 }
 
 @keyframes pulse-soft {
-  0% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.2); }
-  70% { box-shadow: 0 0 0 15px rgba(234, 179, 8, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); }
+  0% {
+    box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.2);
+  }
+
+  70% {
+    box-shadow: 0 0 0 15px rgba(234, 179, 8, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(234, 179, 8, 0);
+  }
 }
 
 .pulse-accent {
   animation: pulse-soft 2s infinite;
 }
+
 @keyframes bounce-slow {
-  0%, 100% { transform: translateY(-5%); animation-timing-function: cubic-bezier(0.8, 0, 1, 1); }
-  50% { transform: translateY(0); animation-timing-function: cubic-bezier(0, 0, 0.2, 1); }
+
+  0%,
+  100% {
+    transform: translateY(-5%);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+
+  50% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
 }
 
 .animate-bounce-slow {
   animation: bounce-slow 3s infinite;
+}
+
+/* Google Places Autocomplete — Dark Theme */
+.pac-container {
+  background-color: #0F172A !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 1rem !important;
+  margin-top: 6px !important;
+  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.8) !important;
+  font-family: 'Outfit', sans-serif !important;
+  z-index: 10000 !important;
+  overflow: hidden !important;
+  padding: 4px 0 !important;
+}
+
+.pac-item {
+  background-color: transparent !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.04) !important;
+  padding: 10px 16px !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+
+.pac-item:first-child {
+  border-top: none !important;
+}
+
+.pac-item:hover,
+.pac-item-selected {
+  background-color: rgba(234, 179, 8, 0.1) !important;
+}
+
+.pac-item-query {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+}
+
+.pac-matched {
+  color: #EAB308 !important;
+  font-weight: 700 !important;
+}
+
+.pac-icon {
+  filter: invert(1) opacity(0.4) !important;
+}
+
+.pac-item:hover .pac-icon {
+  filter: invert(1) opacity(0.7) !important;
+}
+
+.pac-logo::after {
+  display: none !important;
 }

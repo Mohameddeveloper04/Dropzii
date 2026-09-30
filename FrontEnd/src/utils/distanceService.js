@@ -1,0 +1,113 @@
+/**
+ * Distance calculation using OpenStreetMap (Nominatim) and OSRM
+ * This bypasses Google Maps Distance Matrix which is restricted on this API key.
+ */
+
+// Helper to use Places API for geocoding
+async function geocodeWithPlaces(address) {
+    return new Promise((resolve, reject) => {
+        if (!window.google || !window.google.maps || !window.google.maps.places) {
+            const div = document.createElement("div");
+            // If the library isn't loaded, this might fail, but usually it's loaded by the main script
+            if (window.google && window.google.maps && window.google.maps.places === undefined) {
+                reject(new Error("Places API not fully loaded yet"));
+                return;
+            }
+        }
+
+        const dummyElement = document.createElement("div");
+        const service = new window.google.maps.places.PlacesService(dummyElement);
+        const request = {
+            query: address,
+            fields: ['geometry'],
+        };
+
+        service.findPlaceFromQuery(request, function (results, status) {
+            if (status === window.google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
+                const loc = results[0].geometry.location;
+                // findPlaceFromQuery can return multiple results, we take the best one
+                resolve({ lat: loc.lat(), lon: loc.lng() });
+            } else {
+                reject(new Error("PlacesService findPlaceFromQuery failed: " + status));
+            }
+        });
+    });
+}
+
+// Geocode an address to lat/lng using Google Maps Places or OpenStreetMap
+async function geocode(address) {
+    try {
+        if (window.google && window.google.maps) {
+            const result = await geocodeWithPlaces(address);
+            if (result) return result;
+        }
+    } catch (e) {
+        console.warn("Google Places findPlaceFromQuery failed, falling back to Nominatim:", e);
+    }
+
+    // Fallback to nominatim (Try the full address first)
+    try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data && data.length > 0) {
+            return { lat: data[0].lat, lon: data[0].lon };
+        }
+    } catch (e) { /* ignore */ }
+
+    // Looser fallback to nominatim (First part of the address)
+    const shortAddress = address.split(',')[0];
+    const url2 = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(shortAddress)}&limit=1`;
+    const response2 = await fetch(url2);
+    const data2 = await response2.json();
+    if (data2 && data2.length > 0) {
+        return { lat: data2[0].lat, lon: data2[0].lon };
+    }
+
+    throw new Error("Could not geocode address: " + address);
+}
+
+
+/**
+ * Get driving distance between two place names using OSRM.
+ *
+ * @param {string} origin - Origin place name or address.
+ * @param {string} destination - Destination place name or address.
+ * @returns {Promise<{ distanceKm: number, durationText: string, distanceText: string }>}
+ */
+export async function getDistance(origin, destination) {
+    try {
+        // 1. Get Coordinates
+        const originCoords = await geocode(origin);
+        const destCoords = await geocode(destination);
+
+        // 2. Compute driving route using OSRM
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${originCoords.lon},${originCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`;
+
+        const response = await fetch(osrmUrl);
+        const data = await response.json();
+
+        if (data.code !== "Ok" || !data.routes || data.routes.length === 0) {
+            throw new Error("OSRM failed to find a route.");
+        }
+
+        const route = data.routes[0];
+        const distanceKm = route.distance / 1000;
+
+        // Convert duration (seconds) to readable text
+        const durationMinutes = Math.round(route.duration / 60);
+        const hours = Math.floor(durationMinutes / 60);
+        const mins = durationMinutes % 60;
+        const durationText = hours > 0 ? `${hours} hrs ${mins} mins` : `${mins} mins`;
+
+        return {
+            distanceKm: Math.round(distanceKm),
+            durationText,
+            distanceText: `${distanceKm.toFixed(1)} km`,
+        };
+
+    } catch (error) {
+        console.error("Distance Service Error:", error);
+        throw error;
+    }
+}

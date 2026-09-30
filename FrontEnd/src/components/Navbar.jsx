@@ -10,6 +10,7 @@ const navLinks = [
   { name: "Popular Routes", path: "/popular-routes" },
   { name: "About", path: "/about" },
   { name: "Contact", path: "/contact" },
+  { name: "Blog", path: "/best-one-way-taxi-in-chennai" },
 ];
 
 export default function Navbar() {
@@ -36,24 +37,24 @@ export default function Navbar() {
       animate="visible"
       variants={navbarVariants}
       className={`fixed w-full z-[100] transition-all duration-700 font-urbanist ${scrolled
-          ? "py-4 bg-background/80 backdrop-blur-2xl border-b border-white/5 shadow-premium"
-          : "py-6 bg-transparent"
+        ? "py-4 bg-background/80 backdrop-blur-2xl border-b border-white/5 shadow-premium"
+        : "py-6 bg-transparent"
         }`}
     >
       <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-4 group relative">
           <div className="absolute -inset-4 bg-accent/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-          <img 
-            src="/assets/logo1.png" 
-            alt="Dropzii" 
-            className="h-16 md:h-20 object-contain drop-shadow-accent-glow group-hover:scale-105 transition-transform duration-500" 
+          <img
+            src="/assets/logo1.png"
+            alt="Dropzii"
+            className="h-16 md:h-20 object-contain drop-shadow-accent-glow group-hover:scale-105 transition-transform duration-500"
           />
           <div className="flex items-baseline">
             <span className="text-2xl md:text-3xl font-black tracking-widest text-white">DROPZ</span>
             <span className="text-2xl md:text-3xl font-black tracking-widest text-accent">II</span>
           </div>
-          
+
         </Link>
         {/* Desktop Links */}
         <div className="hidden lg:flex items-center gap-10">
@@ -63,8 +64,8 @@ export default function Navbar() {
                 key={link.name}
                 to={link.path}
                 className={`text-xs font-bold uppercase tracking-[0.2em] transition-all duration-500 relative py-2 block ${location.pathname === link.path
-                    ? "text-accent"
-                    : "text-white/40 hover:text-white"
+                  ? "text-accent"
+                  : "text-white/40 hover:text-white"
                   }`}
               >
                 {link.name}

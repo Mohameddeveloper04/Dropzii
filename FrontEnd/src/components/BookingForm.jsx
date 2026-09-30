@@ -1,27 +1,13 @@
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
-import { MapPin, Calendar, Clock, User, Phone, Navigation, Locate, ChevronRight, X, MessageCircle, RotateCcw } from "lucide-react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { MapPin, Calendar, Clock, User, Phone, Navigation, Locate, ChevronRight, RotateCcw } from "lucide-react";
 import { cn } from "../utils/cn";
 import { useToast } from "../context/ToastContext";
-
-const WHATSAPP_NUMBER = "919442059952";
-
-function buildWhatsAppMessage(data, isRoutine) {
-  const pickupText = data.pickupLink
-    ? `${data.pickup}\nPickup Map: ${data.pickupLink}`
-    : data.pickup;
-  if (isRoutine) {
-    return encodeURIComponent(
-      `Hello Dropzii! I'd like to book a Routine Trip.\n\nName: ${data.name}\nPhone: ${data.phone}\nPickup: ${pickupText}\nDrop: ${data.drop}\nStart Date & Time: ${data.date ? data.date + (data.time ? " at " + data.time : "") : ""}\nReturn Date: ${data.returnDate || "N/A"}\n\nPlease confirm my booking.`
-    );
-  }
-  return encodeURIComponent(
-    `Hello Dropzii! I'd like to book a taxi.\n\nName: ${data.name}\nPhone: ${data.phone}\nPickup: ${pickupText}\nDrop: ${data.drop}\nDate & Time: ${data.date ? data.date + (data.time ? " at " + data.time : "") : ""}\n\nPlease confirm my booking.`
-  );
-}
+import { getDistance } from "../utils/distanceService";
 
 export default function BookingForm({ isSticky = false }) {
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("oneway");
 
   const emptyForm = {
@@ -33,6 +19,7 @@ export default function BookingForm({ isSticky = false }) {
     date: "",
     time: "",
     returnDate: "",
+    days: "1",
   };
 
   const [formData, setFormData] = useState(emptyForm);
@@ -40,6 +27,90 @@ export default function BookingForm({ isSticky = false }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchParams] = useSearchParams();
   const formRef = useRef(null);
+
+  // Autocomplete state
+  const [pickupSuggestions, setPickupSuggestions] = useState([]);
+  const [dropSuggestions, setDropSuggestions] = useState([]);
+  const [showPickupDropdown, setShowPickupDropdown] = useState(false);
+  const [showDropDropdown, setShowDropDropdown] = useState(false);
+  const pickupTimerRef = useRef(null);
+  const dropTimerRef = useRef(null);
+  const pickupWrapperRef = useRef(null);
+  const dropWrapperRef = useRef(null);
+
+  // Fetch suggestions using the new Places API
+  const fetchSuggestions = async (input, setSuggestions, setShow) => {
+    if (!input || input.length < 2) {
+      setSuggestions([]);
+      setShow(false);
+      return;
+    }
+    try {
+      const { AutocompleteSuggestion } = await window.google.maps.importLibrary("places");
+      const request = {
+        input,
+        includedRegionCodes: ["in"],
+        language: "en",
+      };
+      const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+      const results = suggestions
+        .map((s) => s.placePrediction)
+        .filter(Boolean)
+        .slice(0, 5)
+        .map((p) => ({
+          mainText: p.mainText?.text || "",
+          secondaryText: p.secondaryText?.text || "",
+          fullText: p.text?.text || "",
+          placeId: p.placeId,
+        }));
+      setSuggestions(results);
+      setShow(results.length > 0);
+    } catch {
+      setSuggestions([]);
+      setShow(false);
+    }
+  };
+
+  // Debounced pickup input handler
+  const handlePickupChange = (val) => {
+    setFormData((prev) => ({ ...prev, pickup: val, pickupLink: "" }));
+    clearTimeout(pickupTimerRef.current);
+    pickupTimerRef.current = setTimeout(() => fetchSuggestions(val, setPickupSuggestions, setShowPickupDropdown), 300);
+  };
+
+  // Debounced drop input handler
+  const handleDropChange = (val) => {
+    setFormData((prev) => ({ ...prev, drop: val }));
+    clearTimeout(dropTimerRef.current);
+    dropTimerRef.current = setTimeout(() => fetchSuggestions(val, setDropSuggestions, setShowDropDropdown), 300);
+  };
+
+  // Select a suggestion
+  const selectPickupSuggestion = (suggestion) => {
+    setFormData((prev) => ({ ...prev, pickup: suggestion.fullText, pickupLink: "" }));
+    setShowPickupDropdown(false);
+    setPickupSuggestions([]);
+  };
+
+  const selectDropSuggestion = (suggestion) => {
+    setFormData((prev) => ({ ...prev, drop: suggestion.fullText }));
+    setShowDropDropdown(false);
+    setDropSuggestions([]);
+  };
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (pickupWrapperRef.current && !pickupWrapperRef.current.contains(e.target)) {
+        setShowPickupDropdown(false);
+      }
+      if (dropWrapperRef.current && !dropWrapperRef.current.contains(e.target)) {
+        setShowDropDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const p = searchParams.get("pickup");
@@ -50,15 +121,11 @@ export default function BookingForm({ isSticky = false }) {
         ...(p && { pickup: p }),
         ...(d && { drop: d })
       }));
-      // Scroll to form when auto-filling
       setTimeout(() => {
         formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 100);
     }
   }, [searchParams]);
-
-  const [showPopup, setShowPopup] = useState(false);
-  const [submittedData, setSubmittedData] = useState(null);
 
   const handleUseCurrentLocation = (field) => {
     if ("geolocation" in navigator) {
@@ -102,37 +169,44 @@ export default function BookingForm({ isSticky = false }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    if (!formData.pickup || !formData.drop) {
+      showToast("Please enter pickup and drop locations.", "error");
+      return;
+    }
 
+    setIsSubmitting(true);
     const isRoutine = activeTab === "routine";
 
-    const submissionData = {
-      access_key: import.meta.env.VITE_WEB3FORMS_ACCESS_KEY || "94152d23-0038-4451-bd19-93dddae345f5",
-      name: formData.name,
-      phone: formData.phone,
-      pickup: formData.pickup,
-      pickup_map_link: formData.pickupLink || "",
-      drop: formData.drop,
-      date: formData.date,
-      time: formData.time,
-      trip_type: isRoutine ? "Routine Trip" : "One Way / Airport",
-      ...(isRoutine && { return_date: formData.returnDate }),
-      from_name: "Dropzii Booking",
-      to: "dropziitaxi@gmail.com",
-      subject: `New ${isRoutine ? "Routine Trip" : "Taxi"} Booking from ${formData.name}`,
-    };
-
     try {
-      const response = await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(submissionData),
-      });
+      const distData = await getDistance(formData.pickup, formData.drop);
+      const days = isRoutine ? parseInt(formData.days || "1", 10) : 1;
 
-      // Optional: Send to Google Sheets via Google Apps Script Webhook
+      // Send early lead notification mail
+      const submissionData = {
+        access_key: import.meta.env.VITE_WEB3FORMS_ACCESS_KEY || "94152d23-0038-4451-bd19-93dddae345f5",
+        name: formData.name,
+        phone: formData.phone,
+        pickup: formData.pickup,
+        pickup_map_link: formData.pickupLink || "",
+        drop: formData.drop,
+        date: formData.date,
+        time: formData.time,
+        trip_type: isRoutine ? "Routine Trip" : "One Way / Airport",
+        ...(isRoutine && { return_date: formData.returnDate, days }),
+        distance: distData.distanceText,
+        status: "Estimate Requested (Lead)",
+        from_name: "Dropzii Leads",
+        to: "dropziitaxi@gmail.com",
+        subject: `New Lead: ${isRoutine ? "Routine Trip" : "Taxi"} Inquiry from ${formData.name}`,
+      };
+
+      // Fire and forget (does not block navigation)
+      fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(submissionData),
+      }).catch(err => console.warn("Mail error:", err));
+
       const scriptUrl = import.meta.env.VITE_GOOGLE_SHEETS_URL;
       if (scriptUrl) {
         fetch(scriptUrl, {
@@ -143,17 +217,17 @@ export default function BookingForm({ isSticky = false }) {
         }).catch(err => console.warn("Google Sheets failed:", err));
       }
 
-      const result = await response.json();
-      if (result.success) {
-        setSubmittedData({ ...formData, isRoutine });
-        setShowPopup(true);
-        setFormData(emptyForm);
-      } else {
-        showToast("Something went wrong. Please try again.", "error");
-      }
-    } catch (error) {
-      console.error("Submission error:", error);
-      showToast("Error sending booking request. Please try again.", "error");
+      navigate("/fare-estimate", {
+        state: {
+          formData,
+          distanceData: distData,
+          tripType: activeTab,
+          days,
+        },
+      });
+    } catch (err) {
+      console.error("Distance Error:", err);
+      showToast("Unable to calculate distance. Please try again or book directly via WhatsApp.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -245,16 +319,41 @@ export default function BookingForm({ isSticky = false }) {
             {/* Pickup & Drop */}
             <div className="space-y-2 pt-1">
               {/* Pickup */}
-              <div className="relative group">
-                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 w-4 h-4 group-focus-within:text-accent transition-all duration-300" />
-                <input
-                  required
-                  type="text"
-                  placeholder="Pickup Location"
-                  className="bg-white/[0.02] border border-white/5 rounded-xl px-5 py-3.5 focus:outline-none focus:border-accent/30 focus:bg-white/[0.04] transition-all duration-500 w-full text-white placeholder:text-white/50 pl-11 text-sm font-medium"
-                  value={formData.pickup}
-                  onChange={(e) => setFormData({ ...formData, pickup: e.target.value, pickupLink: "" })}
-                />
+              <div ref={pickupWrapperRef} className="relative">
+                <div className="relative group">
+                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 w-4 h-4 group-focus-within:text-accent transition-all duration-300" />
+                  <input
+                    required
+                    type="text"
+                    placeholder="Pickup Location"
+                    autoComplete="off"
+                    className="bg-white/[0.02] border border-white/5 rounded-xl px-5 py-3.5 focus:outline-none focus:border-accent/30 focus:bg-white/[0.04] transition-all duration-500 w-full text-white placeholder:text-white/50 pl-11 text-sm font-medium"
+                    value={formData.pickup}
+                    onChange={(e) => handlePickupChange(e.target.value)}
+                    onFocus={() => pickupSuggestions.length > 0 && setShowPickupDropdown(true)}
+                  />
+                </div>
+                {showPickupDropdown && pickupSuggestions.length > 0 && (
+                  <div className="absolute z-50 left-0 right-0 mt-1.5 bg-[#0F172A] border border-white/8 rounded-xl shadow-luxury max-h-56 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10">
+                    {pickupSuggestions.map((s, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-accent/10 transition-colors cursor-pointer border-t border-white/[0.03] first:border-t-0"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selectPickupSuggestion(s)}
+                      >
+                        <MapPin size={14} className="text-accent shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <span className="text-white text-sm font-semibold block truncate">{s.mainText}</span>
+                          {s.secondaryText && (
+                            <span className="text-white/30 text-xs block truncate">{s.secondaryText}</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Use current location link */}
@@ -273,16 +372,41 @@ export default function BookingForm({ isSticky = false }) {
               </p>
 
               {/* Drop */}
-              <div className="relative group">
-                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 w-4 h-4 group-focus-within:text-accent transition-all duration-300" />
-                <input
-                  required
-                  type="text"
-                  placeholder="Drop Location"
-                  className="bg-white/[0.02] border border-white/5 rounded-xl px-5 py-3.5 focus:outline-none focus:border-accent/30 focus:bg-white/[0.04] transition-all duration-500 w-full text-white placeholder:text-white/50 pl-11 text-sm font-medium"
-                  value={formData.drop}
-                  onChange={(e) => setFormData({ ...formData, drop: e.target.value })}
-                />
+              <div ref={dropWrapperRef} className="relative">
+                <div className="relative group">
+                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 w-4 h-4 group-focus-within:text-accent transition-all duration-300" />
+                  <input
+                    required
+                    type="text"
+                    placeholder="Drop Location"
+                    autoComplete="off"
+                    className="bg-white/[0.02] border border-white/5 rounded-xl px-5 py-3.5 focus:outline-none focus:border-accent/30 focus:bg-white/[0.04] transition-all duration-500 w-full text-white placeholder:text-white/50 pl-11 text-sm font-medium"
+                    value={formData.drop}
+                    onChange={(e) => handleDropChange(e.target.value)}
+                    onFocus={() => dropSuggestions.length > 0 && setShowDropDropdown(true)}
+                  />
+                </div>
+                {showDropDropdown && dropSuggestions.length > 0 && (
+                  <div className="absolute z-50 left-0 right-0 mt-1.5 bg-[#0F172A] border border-white/8 rounded-xl shadow-luxury max-h-56 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10">
+                    {dropSuggestions.map((s, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-accent/10 transition-colors cursor-pointer border-t border-white/[0.03] first:border-t-0"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selectDropSuggestion(s)}
+                      >
+                        <MapPin size={14} className="text-accent shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <span className="text-white text-sm font-semibold block truncate">{s.mainText}</span>
+                          {s.secondaryText && (
+                            <span className="text-white/30 text-xs block truncate">{s.secondaryText}</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -317,20 +441,35 @@ export default function BookingForm({ isSticky = false }) {
                 </div>
               </div>
             </div>
-            {/* Return Date — only for Routine Trip */}
+            {/* Return Date & Days — only for Routine Trip */}
             {isRoutine && (
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[10px] text-accent/60 font-bold uppercase tracking-widest ml-1">Return Date</label>
-                <div className="relative group">
-                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-accent/60 w-4 h-4 group-focus-within:text-accent transition-all duration-300" />
-                  <input
-                    required
-                    type="date"
-                    placeholder="Select Return Date"
-                    className="bg-white/[0.02] border border-accent/20 rounded-xl px-5 py-3.5 focus:outline-none focus:border-accent/40 focus:bg-white/[0.04] transition-all duration-500 w-full text-white placeholder:text-white/20 pl-11 text-sm font-medium appearance-none"
-                    value={formData.returnDate}
-                    onChange={(e) => setFormData({ ...formData, returnDate: e.target.value })}
-                  />
+              <div className="grid grid-cols-2 gap-4 pt-1">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-accent/60 font-bold uppercase tracking-widest ml-1">Return Date</label>
+                  <div className="relative group">
+                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-accent/60 w-4 h-4 group-focus-within:text-accent transition-all duration-300 pointer-events-none" />
+                    <input
+                      required
+                      type="date"
+                      placeholder="Select Return Date"
+                      className="bg-white/[0.02] border border-accent/20 rounded-xl px-5 py-3 md:py-4 focus:outline-none focus:border-accent/40 focus:bg-white/[0.04] transition-all duration-500 w-full text-white placeholder:text-white/20 pl-11 text-sm font-medium appearance-none"
+                      value={formData.returnDate}
+                      onChange={(e) => setFormData({ ...formData, returnDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-accent/60 font-bold uppercase tracking-widest ml-1">Number of Days</label>
+                  <div className="relative group">
+                    <input
+                      required
+                      type="number"
+                      min="1"
+                      className="bg-white/[0.02] border border-accent/20 rounded-xl px-5 py-3 md:py-4 focus:outline-none focus:border-accent/40 focus:bg-white/[0.04] transition-all duration-500 w-full text-white text-sm font-medium"
+                      value={formData.days}
+                      onChange={(e) => setFormData({ ...formData, days: e.target.value })}
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -346,11 +485,11 @@ export default function BookingForm({ isSticky = false }) {
               {isSubmitting ? (
                 <>
                   <div className="w-5 h-5 border-2 border-luxury-charcoal/30 border-t-luxury-charcoal rounded-full animate-spin" />
-                  Processing...
+                  Calculating...
                 </>
               ) : (
                 <>
-                  Confirm Booking
+                  Get Estimate
                   <ChevronRight className="w-5 h-5 group-hover/form:translate-x-1 transition-transform" />
                 </>
               )}
@@ -359,60 +498,6 @@ export default function BookingForm({ isSticky = false }) {
           </form>
         </div>
       </div>
-
-      {/* WhatsApp Confirmation Popup */}
-      {showPopup && submittedData && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center px-4">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setShowPopup(false)}
-          />
-
-          {/* Modal */}
-          <div className="relative bg-luxury-charcoal border border-white/10 rounded-[2rem] p-8 max-w-sm w-full shadow-luxury animate-fade-in z-10">
-            {/* Close */}
-            <button
-              onClick={() => setShowPopup(false)}
-              className="absolute top-5 right-5 text-white/30 hover:text-white transition-colors"
-            >
-              <X size={20} />
-            </button>
-
-            {/* Icon */}
-            <div className="flex justify-center mb-6">
-              <div className="w-20 h-20 rounded-full bg-[#25D366]/10 border border-[#25D366]/20 flex items-center justify-center shadow-inner">
-                <MessageCircle className="text-[#25D366] w-10 h-10 drop-shadow-sm" />
-              </div>
-            </div>
-
-            <h4 className="text-xl md:text-2xl font-bold text-center tracking-tight mb-2">
-              Booking Received! 🥳
-            </h4>
-            <p className="text-white/50 text-[13px] text-center leading-relaxed mb-8 px-1">
-              Your request has been sent. Tap below to confirm via WhatsApp and get instant assistance.
-            </p>
-
-            <a
-              href={`https://wa.me/${WHATSAPP_NUMBER}?text=${buildWhatsAppMessage(submittedData, submittedData.isRoutine)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 bg-[#25D366] text-white font-bold py-4 px-4 rounded-2xl hover:scale-[1.02] hover:shadow-xl transition-all duration-300 w-full text-[13px] md:text-sm uppercase tracking-wide relative overflow-hidden group/btn white-space-nowrap flex-nowrap"
-            >
-              <div className="absolute inset-0 bg-white/10 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
-              <MessageCircle size={18} className="relative z-10 shrink-0" />
-              <span className="relative z-10 whitespace-nowrap">Connect on WhatsApp</span>
-            </a>
-
-            <button
-              onClick={() => setShowPopup(false)}
-              className="mt-6 text-white/30 hover:text-white/60 text-[9px] font-bold w-full py-2 transition-colors uppercase tracking-[0.25em] pt-4 opacity-50"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </>
   );
 }
