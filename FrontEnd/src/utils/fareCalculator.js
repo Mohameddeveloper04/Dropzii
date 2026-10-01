@@ -69,7 +69,7 @@ function dailyBatta(dailyKm) {
  */
 export function calculateEstimates(distanceKm, tripType, days = 1) {
     return VEHICLES.map((vehicle) => {
-        const rate = vehicle.rates[tripType];
+        const rate = tripType === "oneway" ? vehicle.rates.oneway : vehicle.rates.roundtrip;
         let chargeableKm, batta, breakdown;
 
         if (tripType === "oneway") {
