@@ -69,26 +69,54 @@ async function geocode(address) {
 
 
 /**
- * Get driving distance between two place names using Google Routes API via Vite proxy.
- * This provides accurate Google Maps distances by calling the Routes API through a proxy.
+ * Get driving distance between two place names using Google Routes API.
+ * In development: uses Vite proxy to avoid CORS.
+ * In production: calls Google Routes API directly.
  *
  * @param {string} origin - Origin place name or address.
  * @param {string} destination - Destination place name or address.
  * @returns {Promise<{ distanceKm: number, durationText: string, distanceText: string }>}
  */
 export async function getDistance(origin, destination) {
-    const response = await fetch("/api/distance", {
-        method: "POST",
-        headers: {
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    const isDev = import.meta.env.DEV;
+
+    let url, headers, body;
+
+    if (isDev) {
+        // Use Vite proxy in development
+        url = "/api/distance";
+        headers = {
             "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+        };
+        body = JSON.stringify({
             origin: { address: origin },
             destination: { address: destination },
             travelMode: "DRIVE",
             routingPreference: "TRAFFIC_UNAWARE",
             computeAlternativeRoutes: false,
-        }),
+        });
+    } else {
+        // Call Google Routes API directly in production
+        url = "https://routes.googleapis.com/directions/v2:computeRoutes";
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
+        };
+        body = JSON.stringify({
+            origin: { address: origin },
+            destination: { address: destination },
+            travelMode: "DRIVE",
+            routingPreference: "TRAFFIC_UNAWARE",
+            computeAlternativeRoutes: false,
+        });
+    }
+
+    const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body,
     });
 
     const data = await response.json();
