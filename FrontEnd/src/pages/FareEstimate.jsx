@@ -225,7 +225,10 @@ export default function FareEstimate() {
                                     {/* Price Display */}
                                     <div className="text-right pl-2 shrink-0 relative z-10">
                                         <p className="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-0.5 hidden sm:block">Total Fare</p>
-                                        <p className="text-xl md:text-2xl font-extrabold text-accent drop-shadow-sm">₹{est.totalEstimate.toLocaleString()}</p>
+                                        <div className="flex flex-col items-end">
+                                            <p className="text-sm text-white/70 line-through mb-0.5 font-semibold">₹{est.totalEstimate.toLocaleString()}</p>
+                                            <p className="text-xl md:text-2xl font-extrabold text-accent drop-shadow-sm">₹{(est.totalEstimate - 100).toLocaleString()}</p>
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -283,7 +286,10 @@ export default function FareEstimate() {
                                         {/* Total */}
                                         <div className="flex justify-between items-center bg-black/40 p-5 rounded-2xl border border-white/5 shadow-inner">
                                             <span className="text-white/90 font-bold text-lg">Total Estimate</span>
-                                            <span className="text-accent font-black text-3xl drop-shadow-md">₹{selectedEst.totalEstimate.toLocaleString()}</span>
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-base text-white/70 line-through mb-0.5 font-semibold">₹{selectedEst.totalEstimate.toLocaleString()}</span>
+                                                <span className="text-accent font-black text-3xl drop-shadow-md">₹{(selectedEst.totalEstimate - 100).toLocaleString()}</span>
+                                            </div>
                                         </div>
 
                                         {/* Note block - Mobile Only */}

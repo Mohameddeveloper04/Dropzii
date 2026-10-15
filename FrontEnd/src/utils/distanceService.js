@@ -69,45 +69,50 @@ async function geocode(address) {
 
 
 /**
- * Get driving distance between two place names using OSRM.
+ * Get driving distance between two place names using Google Routes API via Vite proxy.
+ * This provides accurate Google Maps distances by calling the Routes API through a proxy.
  *
  * @param {string} origin - Origin place name or address.
  * @param {string} destination - Destination place name or address.
  * @returns {Promise<{ distanceKm: number, durationText: string, distanceText: string }>}
  */
 export async function getDistance(origin, destination) {
-    try {
-        // 1. Get Coordinates
-        const originCoords = await geocode(origin);
-        const destCoords = await geocode(destination);
+    const response = await fetch("/api/distance", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            origin: { address: origin },
+            destination: { address: destination },
+            travelMode: "DRIVE",
+            routingPreference: "TRAFFIC_UNAWARE",
+            computeAlternativeRoutes: false,
+        }),
+    });
 
-        // 2. Compute driving route using OSRM
-        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${originCoords.lon},${originCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`;
+    const data = await response.json();
 
-        const response = await fetch(osrmUrl);
-        const data = await response.json();
-
-        if (data.code !== "Ok" || !data.routes || data.routes.length === 0) {
-            throw new Error("OSRM failed to find a route.");
-        }
-
-        const route = data.routes[0];
-        const distanceKm = route.distance / 1000;
-
-        // Convert duration (seconds) to readable text
-        const durationMinutes = Math.round(route.duration / 60);
-        const hours = Math.floor(durationMinutes / 60);
-        const mins = durationMinutes % 60;
-        const durationText = hours > 0 ? `${hours} hrs ${mins} mins` : `${mins} mins`;
-
-        return {
-            distanceKm: Math.round(distanceKm),
-            durationText,
-            distanceText: `${distanceKm.toFixed(1)} km`,
-        };
-
-    } catch (error) {
-        console.error("Distance Service Error:", error);
-        throw error;
+    if (!response.ok) {
+        throw new Error(
+            data.error?.message || data.error || "Unable to calculate distance"
+        );
     }
+
+    const route = data.routes?.[0];
+
+    if (!route) {
+        throw new Error("No driving route found");
+    }
+
+    const distanceKm = route.distanceMeters / 1000;
+    const totalMinutes = Math.round(Number(route.duration.replace("s", "")) / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    return {
+        distanceKm: Math.round(distanceKm),
+        durationText: hours ? `${hours} hrs ${minutes} mins` : `${minutes} mins`,
+        distanceText: `${Math.round(distanceKm)} km`,
+    };
 }
